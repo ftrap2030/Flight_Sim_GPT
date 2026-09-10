@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 *.json
 !.vscode/*.json
+!godot/data/*.json
+godot/.godot/
+godot/build/

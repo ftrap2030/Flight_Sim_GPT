@@ -1,0 +1,45 @@
+name: Miami graphics
+
+on:
+  pull_request:
+    paths: ['godot/**', '.github/workflows/graphics.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Godot and Mac templates
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/miami-tools"
+          cd "$RUNNER_TEMP/miami-tools"
+          curl --fail --location --retry 3 -o godot.zip https://github.com/godotengine/godot-builds/releases/download/4.5.1-stable/Godot_v4.5.1-stable_linux.x86_64.zip
+          echo '02ec53d1cc7dbb9cc6355393c61b9ab43d1244751a124f10248a4802830788cd  godot.zip' | sha256sum --check
+          unzip -q godot.zip
+          chmod +x Godot_v4.5.1-stable_linux.x86_64
+          echo "GODOT=$RUNNER_TEMP/miami-tools/Godot_v4.5.1-stable_linux.x86_64" >> "$GITHUB_ENV"
+          curl --fail --location --retry 3 -o templates.tpz https://github.com/godotengine/godot-builds/releases/download/4.5.1-stable/Godot_v4.5.1-stable_export_templates.tpz
+          echo '1998af37f1387684e2c211cdb483daf492fc64dc6b12096bddcdca25b6910c86  templates.tpz' | sha256sum --check
+          unzip -q templates.tpz templates/macos.zip templates/version.txt
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.5.1.stable"
+          cp templates/macos.zip templates/version.txt "$HOME/.local/share/godot/export_templates/4.5.1.stable/"
+      - name: Validate scene and behavior
+        run: python3 godot/tests/validate.py --godot "$GODOT"
+      - name: Export Mac application
+        run: |
+          mkdir -p godot/build
+          "$GODOT" --headless --path godot --export-release macOS build/Miami-Approach-macOS.zip
+          python3 godot/tests/check_mac_export.py godot/build/Miami-Approach-macOS.zip
+      - name: Upload Mac prototype
+        uses: actions/upload-artifact@v4
+        with:
+          name: Miami-Approach-macOS
+          path: godot/build/Miami-Approach-macOS.zip
+          if-no-files-found: error
+          retention-days: 30

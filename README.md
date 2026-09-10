@@ -1,5 +1,10 @@
 # Flight_Sim
 
+**Miami graphics prototype:** the independent Godot project is in [`godot/`](godot/README.md).
+It includes cockpit/exterior cameras, a Miami approach replay, scenery and
+lighting presets, and benchmark capture. See its README for Mac setup and
+current limitations. The Python simulator below remains unchanged.
+
 A text-based Airbus flight simulator with a real point-mass physics model and a
 cinematic description engine. Pick an aircraft, pick your weather, and you start
 at 5,000 feet in straight and level flight. Everything after that is up to you.
