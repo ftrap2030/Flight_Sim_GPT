@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Miami Approach</title>
+<meta name="description" content="Explore Flight Sim GPT's Miami approach graphics prototype in your browser.">
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#071319;color:#e5f0ee}*{box-sizing:border-box}body{margin:0;height:100dvh;padding-bottom:36px;display:grid;place-items:center;overflow:hidden}#stage{position:relative;width:min(100vw,calc(177.7778dvh - 64px));aspect-ratio:16/9;background:#071319}canvas{display:block;width:100%;height:100%;outline:none}#launch{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at 70% 15%,#1a3b4d,#071319 65%);padding:24px}#launch[hidden]{display:none}.card{width:min(100%,500px);border-top:2px solid #a9e2c4;padding:32px 0}.eyebrow{font-size:14px;color:#a9e2c4;letter-spacing:.15em}h1{font-size:clamp(32px,6vw,52px);letter-spacing:-.04em;line-height:1.1;margin:20px 0}p{font-size:16px;line-height:1.65;color:#b7c9ca}button{font:inherit;font-size:16px;padding:14px 22px;border:1px solid #6a9a8c;border-radius:7px;background:#a9e2c4;color:#102923;cursor:pointer}button:disabled{opacity:.6;cursor:wait}button:focus-visible{outline:3px solid white;outline-offset:4px}progress{width:100%;height:7px;accent-color:#a9e2c4;margin:20px 0 0}#status{min-height:3em;font-size:14px}#fullscreen{position:fixed;right:12px;bottom:4px;padding:4px 10px;font-size:14px;background:#0d2029e8;color:#d6e5e4;border-color:#45665d}#tip{position:fixed;left:12px;bottom:5px;margin:0;font-size:14px;color:#b7c9ca}#tip[hidden],#fullscreen[hidden],progress[hidden]{display:none}@media(max-width:700px){#tip{display:none}.card{padding:16px 0}p{margin:12px 0}}
+</style>
+$GODOT_HEAD_INCLUDE
+</head>
+<body>
+<main id="stage"><canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Miami flight simulator graphics prototype">Your browser needs WebGL 2 to run this prototype.</canvas></main>
+<p id="tip" hidden>1 / 2 / 3 cameras · Space pause · R restart · H hide controls</p>
+<button id="fullscreen" hidden>Full screen</button>
+<section id="launch" aria-label="Start Miami Approach">
+<div class="card"><div class="eyebrow">KMIA / RUNWAY 26R</div><h1>Miami Approach</h1>
+<p>A cockpit, wing and chase view of the Miami approach. This graphics prototype follows an automatic replay; manual flying comes later.</p>
+<button id="start">Open cockpit</button><progress id="progress" max="1" value="0" hidden aria-label="Loading progress"></progress>
+<p id="status" role="status">Use a desktop browser with hardware acceleration enabled. The first launch downloads about 10 MB.</p>
+</div></section>
+<script src="$GODOT_URL"></script>
+<script src="wasm-loader.js"></script>
+<script>
+'use strict';
+const config=$GODOT_CONFIG;
+const canvas=document.getElementById('canvas');
+const start=document.getElementById('start');
+const status=document.getElementById('status');
+const progress=document.getElementById('progress');
+const launch=document.getElementById('launch');
+const fullscreen=document.getElementById('fullscreen');
+let starting=false;
+let started=false;
+const engine=new Engine(config);
+function showError(message){launch.hidden=false;status.textContent=message;start.textContent='Reload and retry';start.disabled=false;starting=false;}
+start.addEventListener('click',async()=>{
+ if(starting)return;
+ if(start.textContent==='Reload and retry'){location.reload();return;}
+ const missing=Engine.getMissingFeatures({threads:false});
+ if(missing.length){showError('This browser cannot run the scene: '+missing.join(', ')+'. Try an updated Chrome with hardware acceleration enabled.');return;}
+ if(!globalThis.DecompressionStream){showError('Please update your browser to load the scene.');return;}
+ starting=true;start.disabled=true;progress.hidden=false;status.textContent='Loading Miami…';
+ const restoreFetch=MiamiWasmLoader.install(config.executable+'.wasm');
+ const timer=setTimeout(()=>{if(!started)showError('Loading is taking too long. Reload to retry, and check that hardware acceleration is enabled.');},90000);
+ try{
+  await engine.startGame({canvas,canvasResizePolicy:0,persistentPaths:[],onProgress:(current,total)=>{if(total){progress.value=current/total;status.textContent=current>=total?'Preparing the cockpit…':'Loading Miami… '+Math.min(100,Math.round(current/total*100))+'%';}},onPrintError:(...args)=>console.error(...args),onExit:()=>showError('The scene stopped. Reload to start again.')});
+  started=true;clearTimeout(timer);restoreFetch();launch.hidden=true;document.getElementById('tip').hidden=false;fullscreen.hidden=false;canvas.focus();
+ }catch(error){clearTimeout(timer);restoreFetch();showError('Unable to load the scene. '+(error.message||String(error)));}
+});
+fullscreen.addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();canvas.focus();}catch{fullscreen.textContent='Use your browser’s full screen control';}});
+canvas.addEventListener('contextmenu',event=>event.preventDefault());
+</script>
+</body></html>

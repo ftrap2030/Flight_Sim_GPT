@@ -73,7 +73,7 @@ func _ready() -> void:
 	info.add_child(_label("Engine counters ≠ total app RAM\nTarget Mac benchmark still required",12,DIM))
 	record_button = _button("Record benchmark  [B]",app.toggle_benchmark)
 	info.add_child(record_button)
-	info.add_child(_button("Open reports folder",app.open_benchmark_folder))
+	info.add_child(_button("Download last report" if OS.has_feature("web") else "Open reports folder",app.open_benchmark_folder))
 	var cap := CheckButton.new()
 	cap.text = "Limit to 30 FPS"
 	cap.button_pressed = true

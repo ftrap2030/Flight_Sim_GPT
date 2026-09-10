@@ -29,6 +29,7 @@ var capture_light := 0
 var capture_requested := false
 var screenshot_hide_ui := false
 var smoke_test := false
+var last_benchmark_path := ""
 
 func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
@@ -53,7 +54,7 @@ func _ready() -> void:
 	hud = Hud.new()
 	hud.app = self
 	add_child(hud)
-	set_quality(1)
+	set_quality(0 if OS.has_feature("web") else 1)
 	set_lighting(clampi(capture_light,0,2))
 	set_weather(0)
 	select_view(clampi(capture_view,0,2))
@@ -165,7 +166,10 @@ func select_view(index: int) -> void:
 func set_quality(index: int) -> void:
 	quality_index = clampi(index,0,2)
 	render_scale = [0.65,0.85,1.0][quality_index]
-	get_viewport().scaling_3d_scale = render_scale
+	if RenderingServer.get_current_rendering_method() != "gl_compatibility":
+		get_viewport().scaling_3d_scale = render_scale
+	else:
+		render_scale = 1.0
 	get_viewport().msaa_3d = Viewport.MSAA_DISABLED if quality_index==0 else Viewport.MSAA_2X
 	sun.directional_shadow_max_distance = [650.0,1300.0,2200.0][quality_index]
 	world.set_quality(quality_index)
@@ -211,13 +215,22 @@ func settings_snapshot() -> Dictionary:
 func toggle_benchmark() -> void:
 	if benchmark.active:
 		var path := benchmark.finish()
-		hud.notify("Benchmark saved — open the reports folder" if not path.is_empty() else "Could not save benchmark")
+		last_benchmark_path = path
+		if OS.has_feature("web") and not path.is_empty():
+			JavaScriptBridge.download_buffer(FileAccess.get_file_as_bytes(path),path.get_file(),"application/json")
+		hud.notify(("Benchmark downloaded" if OS.has_feature("web") else "Benchmark saved — open the reports folder") if not path.is_empty() else "Could not save benchmark")
 		print("BENCHMARK_REPORT: ",path)
 	else:
 		benchmark.begin(settings_snapshot())
 		hud.notify("Recording frame times and engine counters")
 
 func open_benchmark_folder() -> void:
+	if OS.has_feature("web"):
+		if last_benchmark_path.is_empty():
+			hud.notify("Press B to start recording, then B again to finish")
+		else:
+			JavaScriptBridge.download_buffer(FileAccess.get_file_as_bytes(last_benchmark_path),last_benchmark_path.get_file(),"application/json")
+		return
 	DirAccess.make_dir_recursive_absolute("user://benchmarks")
 	OS.shell_open(ProjectSettings.globalize_path("user://benchmarks"))
 

@@ -11,6 +11,38 @@ taxiing, takeoff, landing physics, and controller support belong to subsequent
 milestones. The original Python simulator remains runnable from the repository
 root with `python main.py`.
 
+## Run in a browser
+
+A browser version is available without a Mac app download. Use the browser link
+provided with the project and select **Open cockpit**. It retains the same
+scene and replay controls and starts at Low detail. A desktop browser with
+WebGL 2 and hardware acceleration is required. Chrome is the first browser to
+try on Mac. The engine downloads about 9 MB compressed on the first launch.
+
+The browser uses Godot's Compatibility renderer and a 1280×720 canvas; visual
+lighting differences from Metal are expected. Detail changes building count,
+antialiasing and shadows; internal rendering stays at 100% of that canvas.
+Benchmark reports download as JSON files when recording stops. Browser memory
+counters do not measure total browser/process memory. Tab suspension can affect
+replay timing and benchmark results.
+
+To rebuild from source (Godot 4.5.1 with Web export templates installed):
+
+```sh
+mkdir -p godot/build/web
+touch godot/build/.gdignore
+godot --headless --editor --path godot --import
+godot --headless --path godot --export-release Web build/web/index.html
+python3 godot/web/prepare_web.py godot/build/web
+node godot/tests/check_web_export.mjs godot/build/web
+```
+
+Serve the prepared files over HTTP(S). Opening `index.html` directly from Finder
+will not work. The loader decompresses the engine explicitly; no special gzip
+headers, service worker, or cross-origin isolation is required. Check
+[Godot's Web export documentation](https://docs.godotengine.org/en/4.5/tutorials/export/exporting_for_web.html)
+for browser limitations.
+
 ## Run on your Mac
 
 The **Miami graphics** GitHub Actions run attached to the pull request produces

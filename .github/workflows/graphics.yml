@@ -26,11 +26,25 @@ jobs:
           echo "GODOT=$RUNNER_TEMP/miami-tools/Godot_v4.5.1-stable_linux.x86_64" >> "$GITHUB_ENV"
           curl --fail --location --retry 3 -o templates.tpz https://github.com/godotengine/godot-builds/releases/download/4.5.1-stable/Godot_v4.5.1-stable_export_templates.tpz
           echo '1998af37f1387684e2c211cdb483daf492fc64dc6b12096bddcdca25b6910c86  templates.tpz' | sha256sum --check
-          unzip -q templates.tpz templates/macos.zip templates/version.txt
+          unzip -q templates.tpz templates/macos.zip templates/version.txt templates/web_nothreads_release.zip
           mkdir -p "$HOME/.local/share/godot/export_templates/4.5.1.stable"
-          cp templates/macos.zip templates/version.txt "$HOME/.local/share/godot/export_templates/4.5.1.stable/"
+          cp templates/macos.zip templates/version.txt templates/web_nothreads_release.zip "$HOME/.local/share/godot/export_templates/4.5.1.stable/"
       - name: Validate scene and behavior
         run: python3 godot/tests/validate.py --godot "$GODOT"
+      - name: Export and validate browser build
+        run: |
+          mkdir -p godot/build/web
+          touch godot/build/.gdignore
+          "$GODOT" --headless --path godot --export-release Web build/web/index.html
+          python3 godot/web/prepare_web.py godot/build/web
+          node godot/tests/check_web_export.mjs godot/build/web
+      - name: Upload browser build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Miami-Approach-Web
+          path: godot/build/web/
+          if-no-files-found: error
+          retention-days: 30
       - name: Export Mac application
         run: |
           mkdir -p godot/build
