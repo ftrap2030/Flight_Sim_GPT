@@ -14,8 +14,9 @@ root with `python main.py`.
 ## Run on your Mac
 
 The **Miami graphics** GitHub Actions run attached to the pull request produces
-an artifact named **Miami-Approach-macOS**. Download that artifact while signed
-into GitHub, unzip it, then unzip `Miami-Approach-macOS.zip` and open the app.
+an artifact named **Miami-Approach-Mac-Verified**. Download that artifact while signed
+into GitHub, unzip it, then unzip `Miami-Approach-Mac.zip` and open **Miami Approach.app**.
+Use the final verified artifact; `Miami-Approach-export` is an intermediate build.
 It is a Universal 2 build with an ad-hoc signature for testing, and is not
 notarized. macOS may require approval in **System Settings → Privacy & Security**
 after the first attempt to open it. See [Godot's Mac export notes](https://docs.godotengine.org/en/4.5/tutorials/export/exporting_for_macos.html).
@@ -133,8 +134,10 @@ godot --headless --path godot --export-release macOS build/Miami-Approach-macOS.
 python3 godot/tests/check_mac_export.py godot/build/Miami-Approach-macOS.zip
 ```
 
-The export has been built and package-checked on Linux. That verifies the
-bundle structure, Apple Silicon/Intel executable slices, permissions and
-project pack; it does not verify Metal rendering or launch on macOS. The
+The workflow first exports on Linux, then uses a macOS runner to repackage
+with Apple's `ditto`, apply and verify an ad-hoc signature, extract the final
+ZIP again, and run the packaged executable's headless scene checks. The final
+artifact is uploaded only if those checks pass. These checks do not establish
+Metal rendering or performance on an 8 GB M1. The
 project has been rendered on Godot's Mobile renderer using Linux software
 Vulkan. [Screenshots and acceptance status](../docs/miami-milestone-1.md).

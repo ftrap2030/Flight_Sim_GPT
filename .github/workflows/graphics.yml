@@ -36,10 +36,55 @@ jobs:
           mkdir -p godot/build
           "$GODOT" --headless --path godot --export-release macOS build/Miami-Approach-macOS.zip
           python3 godot/tests/check_mac_export.py godot/build/Miami-Approach-macOS.zip
-      - name: Upload Mac prototype
+      - name: Upload intermediate export
         uses: actions/upload-artifact@v4
         with:
-          name: Miami-Approach-macOS
+          name: Miami-Approach-export
           path: godot/build/Miami-Approach-macOS.zip
+          if-no-files-found: error
+          retention-days: 3
+
+
+  package-on-macos:
+    needs: validate-and-export
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Miami-Approach-export
+          path: incoming
+      - name: Extract export on macOS
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/miami-unpacked"
+          if /usr/bin/ditto -x -k incoming/Miami-Approach-macOS.zip "$RUNNER_TEMP/miami-unpacked"; then
+            echo "Original Godot ZIP extracted successfully with macOS ditto."
+          else
+            echo "ditto could not extract the original ZIP; trying unzip before repackaging."
+            /usr/bin/unzip -oq incoming/Miami-Approach-macOS.zip -d "$RUNNER_TEMP/miami-unpacked"
+          fi
+      - name: Sign and package with Apple tools
+        shell: bash
+        run: |
+          app="$RUNNER_TEMP/miami-unpacked/Miami Approach.app"
+          /usr/bin/codesign --force --deep --sign - "$app"
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "$app"
+          mkdir -p mac-download
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app" mac-download/Miami-Approach-Mac.zip
+      - name: Test extraction and packaged app on macOS
+        shell: bash
+        run: |
+          /usr/bin/ditto -x -k mac-download/Miami-Approach-Mac.zip "$RUNNER_TEMP/miami-roundtrip"
+          app="$RUNNER_TEMP/miami-roundtrip/Miami Approach.app"
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "$app"
+          python3 godot/tests/check_mac_export.py mac-download/Miami-Approach-Mac.zip
+          python3 godot/tests/check_mac_launch.py "$app/Contents/MacOS/Miami Approach"
+      - name: Upload Mac-tested download
+        uses: actions/upload-artifact@v4
+        with:
+          name: Miami-Approach-Mac-Verified
+          path: mac-download/Miami-Approach-Mac.zip
           if-no-files-found: error
           retention-days: 30

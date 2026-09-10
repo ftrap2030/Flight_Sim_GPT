@@ -28,7 +28,8 @@ support, audio, terrain streaming, or surveyed city reconstruction in this build
 | Rendered cockpit, wing and chase views | Inspected on Mobile renderer, Vulkan software device |
 | macOS release export | Built with Godot's built-in ad-hoc signing |
 | Mac ZIP CRC, bundle ID, executable permissions, arm64/x86_64 slices and project pack | Passed |
-| Launch and Metal appearance on macOS | Not tested |
+| macOS packaging and headless launch | Added as required checks for the Mac-Verified artifact following the reported Archive Utility failure |
+| Metal appearance on macOS | Not tested |
 | 8 GB M1 performance and memory over 20 minutes | Not tested; required for milestone acceptance |
 | Photorealistic art finish | Not achieved; current assets establish the scene and material workflow |
 
@@ -57,3 +58,14 @@ art direction. Refine asset quality and scenery geography next; port the
 Python flight model with reference comparisons in the flyable-approach stage.
 Stage 1 remains awaiting hardware and visual acceptance, even though this
 review build is implemented and packaged.
+
+
+## Mac download correction
+
+The first user download failed in Archive Utility with "unsupported format"
+before the app could launch. The original ZIP passed Linux CRC and structure
+checks; those checks were insufficient to establish extraction on macOS.
+The build now adds a macOS job that uses Apple tools to package, extract and
+verify the app, then executes its headless smoke test. Download the final
+`Miami-Approach-Mac-Verified` artifact and open `Miami-Approach-Mac.zip` inside.
+A headless launch check does not replace the target Mac's visual/performance run.
