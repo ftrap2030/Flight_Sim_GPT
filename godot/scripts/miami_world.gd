@@ -4,6 +4,9 @@ extends Node3D
 const Ground = preload("res://scripts/airport_ground.gd")
 var selected_route: MultiMeshInstance3D
 var gate_nodes: Array[Label3D] = []
+var scenery_detail: MultiMeshInstance3D
+var land_polygons: Array[PackedVector2Array] = []
+var land_bounds: Array[Rect2] = []
 const G = preload("res://scripts/geometry.gd")
 var airport: Dictionary
 var threshold := Vector3.ZERO
@@ -23,6 +26,8 @@ func _ready() -> void:
 	_build_ground_network()
 	_build_city()
 	_build_coastal_details()
+	_build_airport_details()
+	_build_landmarks()
 	_build_clouds()
 
 func geo(latitude: float, longitude: float) -> Vector3:
@@ -38,33 +43,51 @@ func _build_land() -> void:
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(100000,100000)
 	G.instance(self,plane,Vector3(0,-0.8,0),ocean_mat).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var shore := PackedVector2Array([Vector2(-26000,-24000),Vector2(-26000,26000)])
-	for z in range(26000,-24001,-500):
-		shore.append(Vector2(coast_x(float(z)),float(z)))
 	var land_mat := ShaderMaterial.new()
 	land_mat.shader = preload("res://shaders/ground.gdshader")
-	G.polygon(self,shore,0.0,land_mat)
-	# A narrow, approximate barrier island establishes the bay and ocean horizon.
-	var island := PackedVector2Array()
-	for z in range(-20000,16001,1000):
-		island.append(Vector2(13600+350*sin(float(z)/4200),z))
-	for z in range(16000,-20001,-1000):
-		island.append(Vector2(14500+350*sin(float(z)/4200),z))
-	G.polygon(self,island,0.8,land_mat)
-	var sand := G.material(Color("bcb89b"))
-	sand.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var beach := PackedVector2Array()
-	for z in range(-20000,16001,1000):
-		beach.append(Vector2(14460+350*sin(float(z)/4200),z))
-	for z in range(16000,-20001,-1000):
-		beach.append(Vector2(14580+350*sin(float(z)/4200),z))
-	G.polygon(self,beach,0.9,sand)
+	var coast: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/miami_coast.json"))
+	var shoals: Array[Transform3D] = []
+	var beaches: Array[Transform3D] = []
+	for row in coast.polygons:
+		var outline := PackedVector2Array()
+		for point in row.outer: outline.append(Vector2(point[0],point[1]))
+		land_polygons.append(outline)
+		var bounds := Rect2(outline[0],Vector2.ZERO)
+		for point in outline: bounds = bounds.expand(point)
+		land_bounds.append(bounds)
+		G.polygon(self,outline,0.0,land_mat)
+		for i in outline.size():
+			var a := Vector3(outline[i].x,-0.65,outline[i].y)
+			var b := Vector3(outline[(i+1)%outline.size()].x,-0.65,outline[(i+1)%outline.size()].y)
+			if a.distance_to(b)<0.1: continue
+			var basis := Basis.looking_at(b-a,Vector3.UP)
+			shoals.append(Transform3D(basis.scaled(Vector3(160,0.05,a.distance_to(b))),(a+b)/2))
+			var center := (a+b)/2
+			# Sand only along the ocean-facing barrier shore, not all bay edges.
+			if center.x>14200 and center.x<17000 and center.z>-9000 and center.z<6500:
+				beaches.append(Transform3D(basis.scaled(Vector3(42,0.08,a.distance_to(b))),center+Vector3.UP*0.75))
+	var shallow := ocean_mat.duplicate() as ShaderMaterial
+	shallow.set_shader_parameter("deep_color",Color("377f85"))
+	shallow.set_shader_parameter("shallow_color",Color("64aaa3"))
+	_batch(shoals,shallow,"CoastalShallows")
+	_batch(beaches,G.material(Color("d0c5a5")),"AtlanticBeach")
+	# Original port island detail supplements the generalized coastline.
+	var port := PackedVector2Array([Vector2(10300,2100),Vector2(12900,2050),Vector2(13000,2700),Vector2(10600,3100)])
+	land_polygons.append(port)
+	land_bounds.append(Rect2(10300,2050,2700,1050))
+	G.polygon(self,port,0.7,_pavement(Color("8e9896"),true))
+
+func _is_land(x: float, z: float) -> bool:
+	var point := Vector2(x,z)
+	for i in land_polygons.size():
+		if land_bounds[i].has_point(point) and Geometry2D.is_point_in_polygon(point,land_polygons[i]): return true
+	return false
 
 func _build_airport() -> void:
 	var grass := G.material(Color("525b38"))
 	G.box(self,Vector3(5400,1.8,3100),Vector3(-200,1.0,0),grass)
-	var asphalt := G.material(Color("30383b"),0.97)
-	var concrete := G.material(Color("8d8d82"),0.92)
+	var asphalt := _pavement(Color("42494a"),false)
+	var concrete := _pavement(Color("979c96"),true)
 	G.box(self,Vector3(3300,0.15,920),Vector3(-200,2.0,330),concrete)
 	for row in airport.runways:
 		var start := geo(float(row.le_latitude_deg),float(row.le_longitude_deg))
@@ -76,7 +99,11 @@ func _build_airport() -> void:
 		add_child(strip)
 		strip.position = start
 		strip.look_at(end,Vector3.UP)
-		G.box(strip,Vector3(width,0.10,length),Vector3(0,0,-length/2),asphalt)
+		var runway_mat := _pavement(Color("41484b"),false)
+		runway_mat.set_shader_parameter("runway",true)
+		runway_mat.set_shader_parameter("threshold",end)
+		runway_mat.set_shader_parameter("inbound",-direction)
+		G.box(strip,Vector3(width,0.10,length),Vector3(0,0,-length/2),runway_mat)
 		# Taxiway proxy, outside the runway strip.
 		G.box(strip,Vector3(22,0.08,length*0.9),Vector3(-width-65,-0.12,-length/2),asphalt)
 		for offset in range(130,int(length)-130,65):
@@ -147,6 +174,7 @@ func _build_city() -> void:
 	for i in 130:
 		var x := rng.randf_range(7300,9650)
 		var z := rng.randf_range(1900,6500)
+		if not _is_land(x,z): continue
 		var height := rng.randf_range(38,200)
 		_add_building(Vector3(x,height/2,z),Vector3(rng.randf_range(23,55),height,rng.randf_range(20,52)),rng.randf())
 	# Distributed buildings are interleaved, so reducing visible count preserves coverage.
@@ -156,10 +184,11 @@ func _build_city() -> void:
 		if i%2==0:
 			x = rng.randf_range(3100,9800)
 			z = rng.randf_range(-5500,9500)
-		if x > coast_x(z) and x < 13750: continue
+		if not _is_land(x,z): continue
 		if absf(x+200)<2950 and absf(z)<1800: continue
 		x = floorf(x/155)*155+77.5+rng.randf_range(-34,34)
 		z = floorf(z/155)*155+77.5+rng.randf_range(-34,34)
+		if not _is_land(x,z): continue
 		var height := rng.randf_range(5,23)
 		if x>13600: height = rng.randf_range(15,100)
 		_add_building(Vector3(x,height/2,z),Vector3(rng.randf_range(22,65),height,rng.randf_range(22,65)),rng.randf())
@@ -183,7 +212,7 @@ func _add_building(at: Vector3, size: Vector3, tone: float) -> void:
 
 func _build_coastal_details() -> void:
 	var bridge := G.material(Color("a6aba7"))
-	for z in [0,5200,-6000]:
+	for z in [900,2300,-6500]:
 		G.box(self,Vector3(4400,5,26),Vector3(11900,8,z),bridge)
 		for x in range(9900,14000,240):
 			G.box(self,Vector3(10,10,10),Vector3(x,2,z),bridge)
@@ -192,10 +221,10 @@ func _build_coastal_details() -> void:
 	for i in 8:
 		var x := 10300.0+i*130.0
 		for side in [-1,1]:
-			G.beam(self,Vector3(x+side*24,0,3300),Vector3(x+side*18,75,3300),5,steel)
-		G.beam(self,Vector3(x,76,3220),Vector3(x,76,3470),5,steel)
-		G.beam(self,Vector3(x,76,3300),Vector3(x,115,3310),4,steel)
-		G.beam(self,Vector3(x,115,3310),Vector3(x,76,3450),1.8,steel)
+			G.beam(self,Vector3(x+side*24,0,2800),Vector3(x+side*18,75,2800),5,steel)
+		G.beam(self,Vector3(x,76,2720),Vector3(x,76,2970),5,steel)
+		G.beam(self,Vector3(x,76,2800),Vector3(x,115,2810),4,steel)
+		G.beam(self,Vector3(x,115,2810),Vector3(x,76,2950),1.8,steel)
 
 func _build_clouds() -> void:
 	cloud_material = ShaderMaterial.new()
@@ -237,7 +266,7 @@ func _build_ground_network() -> void:
 				for side in [-1,1]:
 					var point: Vector2 = path[i-1].lerp(path[i],float(step)/length)+normal*side
 					blue.append(Transform3D(Basis.IDENTITY.scaled(Vector3(0.4,0.3,0.4)),ground_point(point,0.2)))
-	_batch(pavement,G.material(Color("394143")),"TaxiwayPavement")
+	_batch(pavement,_pavement(Color("454e50"),false),"TaxiwayPavement")
 	_batch(yellow,G.material(Color("efc64d")),"TaxiCenterlines")
 	var lamp := G.material(Color("488dfc"))
 	lamp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -246,7 +275,7 @@ func _build_ground_network() -> void:
 	add_child(apron)
 	apron.position = ground_point(Vector2.ZERO,-0.07)
 	apron.look_at(apron.position+inbound,Vector3.UP)
-	var concrete := G.material(Color("8c908a"),0.96)
+	var concrete := _pavement(Color("9c9e94"),true)
 	var wall := G.material(Color("c1c5bd"),0.75)
 	var glass := G.material(Color("284955"),0.28,0.3)
 	G.box(apron,Vector3(235,0.08,1100),Vector3(297.5,0,-1030),concrete)
@@ -285,3 +314,123 @@ func select_gate(index: int) -> void:
 	selected_route.multimesh.instance_count = transforms.size()
 	for i in transforms.size(): selected_route.multimesh.set_instance_transform(i,transforms[i])
 	for i in gate_nodes.size(): gate_nodes[i].modulate = Color("a9e2c4") if i==index else Color("e4e5dc")
+
+func _pavement(color: Color, concrete: bool) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = preload("res://shaders/pavement.gdshader")
+	material.set_shader_parameter("base_color",color)
+	material.set_shader_parameter("concrete",concrete)
+	return material
+
+func _taxi_sign(at: Vector2, text: String, mandatory: bool = false) -> void:
+	var node := Node3D.new()
+	add_child(node)
+	node.position = ground_point(at,1.1)
+	node.look_at(node.position+inbound,Vector3.UP)
+	var bg := G.material(Color("a82a2b") if mandatory else Color("191f20"))
+	var white := G.material(Color("d5d6c5"))
+	G.box(node,Vector3(5.8,1.15,0.18),Vector3.ZERO,bg)
+	G.box(node,Vector3(0.13,0.6,0.13),Vector3(-2,-0.7,0),white)
+	G.box(node,Vector3(0.13,0.6,0.13),Vector3(2,-0.7,0),white)
+	G.text3d(node,text,Vector3(0,0,0.11),48,Color.WHITE if mandatory else Color("ffdb62"),0.019)
+
+func _build_airport_details() -> void:
+	_taxi_sign(Vector2(1710,24),"N  →  GATES")
+	_taxi_sign(Vector2(1760,100),"26R",true)
+	_taxi_sign(Vector2(1670,226),"A1–A10  →")
+	var dark := G.material(Color("2c3b40"))
+	var metal := G.material(Color("818e8e"),0.55,0.3)
+	var walls := G.material(Color("c4c5b7"))
+	var detail: Array[Transform3D] = []
+	for i in 10:
+		var station := Ground.gate_station(i)
+		# Terminal window mullions, roof equipment and static ground-service carts.
+		for offset in range(-40,41,8):
+			_ground_line(detail,Vector2(station+offset,404),Vector2(station+offset,405),0.3,11,8.5)
+		for offset in [-20,20]:
+			var equipment := G.box(self,Vector3(7,2.3,4),ground_point(Vector2(station+offset,451),19.2),metal)
+			equipment.look_at(equipment.position+inbound,Vector3.UP)
+		var cart := Node3D.new()
+		add_child(cart)
+		cart.position = ground_point(Vector2(station+34,376),0)
+		cart.look_at(cart.position+inbound,Vector3.UP)
+		G.box(cart,Vector3(2,0.9,4.2),Vector3(0,0.9,0),walls)
+		G.box(cart,Vector3(1.8,1.25,1.4),Vector3(0,1.8,-1.1),metal)
+		for side in [-1,1]:
+			for z in [-1.4,1.4]:
+				var wheel := G.cylinder(cart,0.32,0.32,0.18,Vector3(side*1.0,0.35,z),dark,10)
+				wheel.rotation.z = PI/2
+		var pole := ground_point(Vector2(station+39,388),0)
+		G.cylinder(self,0.22,0.13,18,pole+Vector3.UP*9,metal,8)
+		G.box(self,Vector3(4,0.25,1.4),pole+Vector3.UP*18,metal)
+	scenery_detail = _batch(detail,metal,"TerminalMullions")
+
+func _build_landmarks() -> void:
+	# Original simplified landmark studies; positions and dimensions approximate.
+	var limestone := G.material(Color("d4c4a2"),0.85)
+	var warm := G.material(Color("b4956b"),0.82)
+	var glass := G.material(Color("31586a"),0.23,0.35)
+	var white := G.material(Color("d2d5ce"),0.65)
+	var freedom := Node3D.new()
+	freedom.name = "FreedomTowerStudy"
+	add_child(freedom)
+	freedom.position = geo(25.7803,-80.1895)
+	G.box(freedom,Vector3(48,12,31),Vector3(0,6,0),limestone)
+	G.box(freedom,Vector3(23,38,22),Vector3(0,30,0),limestone)
+	for y in [16,29,43,50]: G.box(freedom,Vector3(26,1.1,25),Vector3(0,y,0),warm)
+	G.cylinder(freedom,10,8,11,Vector3(0,55,0),limestone,8)
+	G.cylinder(freedom,7,6,8,Vector3(0,64,0),warm,8)
+	G.cylinder(freedom,7,0,8,Vector3(0,72,0),limestone,16)
+	for side in [-1,1]:
+		for y in range(18,46,6):
+			for x in [-7,0,7]: G.box(freedom,Vector3(2.2,3.7,0.18),Vector3(x,y,side*11.1),glass)
+	var museum := Node3D.new()
+	museum.name = "OneThousandMuseumStudy"
+	add_child(museum)
+	museum.position = geo(25.7846,-80.1899)
+	G.box(museum,Vector3(37,200,38),Vector3(0,100,0),glass)
+	G.box(museum,Vector3(42,12,43),Vector3(0,207,0),white)
+	for side in [-1,1]:
+		for direction in [-1,1]:
+			var last := Vector3(side*18,0,direction*20)
+			for i in range(1,13):
+				var y := float(i)*17
+				var at := Vector3(side*(12+6*absf(cos(y*PI/102))),y,direction*20)
+				G.beam(museum,last,at,2.2,white)
+				last = at
+		for y in range(30,190,32): G.beam(museum,Vector3(-15,y,side*20),Vector3(15,y+16,side*20),1.0,white)
+	# A denser Brickell cluster: broad podiums and stepped crowns.
+	for i in 16:
+		var tower := Node3D.new()
+		add_child(tower)
+		tower.position = Vector3(9200+(i%4)*155,0,3200+(i/4)*165)
+		if not _is_land(tower.position.x,tower.position.z): tower.queue_free(); continue
+		var h := 115.0+(i*37)%105
+		G.box(tower,Vector3(70,12,65),Vector3(0,6,0),white)
+		G.box(tower,Vector3(41,h,34),Vector3(0,h/2+12,0),glass)
+		G.box(tower,Vector3(32,14,26),Vector3(0,h+18,0),white)
+	_build_palms()
+
+func _build_palms() -> void:
+	# A single instanced trunk mesh and a single instanced crown mesh.
+	var trunks: Array[Transform3D] = []
+	var crowns: Array[Transform3D] = []
+	for i in 40:
+		var p := ground_point(Vector2(490+i*27,530),0)
+		trunks.append(Transform3D(Basis.IDENTITY.scaled(Vector3(0.45,8,0.45)),p+Vector3.UP*4))
+		crowns.append(Transform3D(Basis(Vector3.UP,float(i)*0.9),p+Vector3.UP*8))
+	_batch(trunks,G.material(Color("796c4e")),"PalmTrunks")
+	var leaves := SurfaceTool.new()
+	leaves.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in 9:
+		var a := float(i)*TAU/9
+		var forward := Vector3(cos(a),0,sin(a))
+		var side := forward.cross(Vector3.UP)*0.4
+		var middle := forward*2.5+Vector3.UP*0.6
+		var end := forward*5.0-Vector3.UP*1.1
+		for p in [Vector3.ZERO,middle-side,middle+side,middle-side,end,middle+side]: leaves.add_vertex(p)
+	leaves.generate_normals()
+	var leaf_material := G.material(Color("3c5940"))
+	leaf_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var batch := _batch(crowns,leaf_material,"PalmCrowns")
+	batch.multimesh.mesh = leaves.commit()

@@ -134,13 +134,19 @@ The four KMIA runway pairs use the coordinates and widths in the bundled
 OurAirports snapshot. The approach targets 26R. Gates A1–A10 form a **fictional north apron**, connected
 without crossing the other runway strips. These are not real KMIA gate numbers
 or real-world taxi instructions. Airport pavement, terminal
-buildings, taxiways, skyline, coastline, islands, bridges, and port cranes are
+buildings, taxiways, skyline, port island, bridges, and port cranes are
 **approximate original scenery**, not a surveyed reconstruction. Terrain is
-flat. The coast is a procedural outline, not imported GIS geometry.
+flat. Regional land and coast shapes now use a clipped Natural Earth 1:10 million
+land dataset. This is generalized GIS geometry, not satellite imagery or a
+surveyed shoreline. Beaches and shallow-water bands are original visual effects.
 
-The cockpit, airframe and materials are original procedural assets. Cockpit
-proportions, the fuselage nose, wing profiles, glazing, doors, and lighting need
-further art work. There is no licensed production-quality A320 cockpit in this
+The cockpit, airframe and materials are original procedural assets. The visual
+update adds a lofted fuselage and shaped nose, rounded cabin windows and door
+seams, cockpit glazing, swept wing sections, inlet lips, pylons and fairings.
+Textured cockpit panels include live speed/heading/altitude readouts, pitch and
+radio-height indications, responsive engine gauges and a taxi map. These
+instruments show the assisted arrival state, not independently simulated avionics.
+Further art refinement is still needed. There is no licensed production-quality A320 cockpit in this
 milestone. There are no paid assets or remote scenery/texture services; the browser
 downloads its engine and packaged project from the site. See [asset provenance](THIRD_PARTY_NOTICES.md).
 
@@ -148,6 +154,20 @@ The source is deliberately separated into `miami_world.gd` (scenery),
 `aircraft_visual.gd` (model), `instrument.gd` (preview displays), `main.gd`
 (demonstration/cameras/settings), `hud.gd`, and `benchmark.gd`. This provides a
 clear attachment point for the later flight-model integration.
+
+## Aircraft and Miami visual update
+
+Runway and taxiway materials add surface grain, asphalt seams, concrete joints
+and touchdown rubber. Taxiway signs, terminal mullions, roof equipment, static
+ground-service vehicles, light poles and palms add detail around all ten gates.
+Freedom Tower and One Thousand Museum have original simplified landmark studies;
+a denser Brickell cluster and port/causeway details make the skyline easier to
+recognize. Landmark placement and dimensions remain approximate.
+
+No sound changes are included in this visual update. The next audio milestone
+requires the user's approval. Mesh batches are used for repetitive scenery;
+there is no satellite texture stream. Performance and RAM on an 8 GB M1 remain
+targets to measure, not guaranteed limits.
 
 ## Development checks
 

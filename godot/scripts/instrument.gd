@@ -1,5 +1,12 @@
 extends Control
 ## Preview instruments follow the camera demonstration, not the Python simulator.
+const Ground = preload("res://scripts/airport_ground.gd")
+var pitch_deg := 2.0
+var radio_height_ft := 0.0
+var gate_index := 4
+var ground_position := Vector2.ZERO
+var ground_direction := Vector2.RIGHT
+var taxi_remaining := 0.0
 var kind := "pfd"
 var altitude_ft := 1400.0
 var distance_nm := 4.5
@@ -38,12 +45,13 @@ func _draw() -> void:
 func _pfd() -> void:
 	label_at(phase+"   /   ASSIST",Vector2(22,35),23,GREEN)
 	draw_rect(Rect2(104,100,304,270),Color("235376"))
-	draw_rect(Rect2(104,228+bank_deg,304,142-bank_deg),Color("745440"))
-	draw_line(Vector2(104,228+bank_deg),Vector2(408,228-bank_deg),WHITE,2)
+	var horizon := clampf(228+pitch_deg*5.0,110,360)
+	draw_rect(Rect2(104,horizon,304,370-horizon),Color("745440"))
+	draw_line(Vector2(104,horizon),Vector2(408,horizon),WHITE,2)
 	for offset in [-80,-40,40,80]:
 		var width := 32.0 if absi(offset)==40 else 46.0
-		draw_line(Vector2(256-width,228+offset),Vector2(256+width,228+offset),WHITE,2)
-		label_at(str(absi(offset)/4),Vector2(270+width,235+offset),17)
+		draw_line(Vector2(256-width,horizon+offset),Vector2(256+width,horizon+offset),WHITE,2)
+		label_at(str(absi(offset)/4),Vector2(270+width,horizon+7+offset),17)
 	draw_line(Vector2(168,229),Vector2(228,229),Color("ffe588"),5)
 	draw_line(Vector2(284,229),Vector2(344,229),Color("ffe588"),5)
 	draw_line(Vector2(256,212),Vector2(256,246),Color("ffe588"),4)
@@ -61,12 +69,15 @@ func _pfd() -> void:
 	draw_rect(Rect2(414,209,96,40),Color("050b10"))
 	draw_rect(Rect2(414,209,96,40),Color("ffe588"),false,2)
 	label_at(str(int(altitude_ft)),Vector2(421,238),27,GREEN)
-	label_at("RADIO  %04d" % int(maxf(0,altitude_ft-8)),Vector2(164,403),22,GREEN)
+	label_at("RADIO  %04d" % int(radio_height_ft),Vector2(164,403),22,GREEN)
 	label_at("HDG       %03d" % int(heading_deg),Vector2(118,444),23)
 	label_at("QNH 1013",Vector2(346,487),21,CYAN)
 	label_at("CAT I",Vector2(28,487),21)
 
 func _navigation() -> void:
+	if phase in ["ROLLOUT","TAXI READY","TAXI","PARKED"]:
+		_ground_map()
+		return
 	label_at("GS %03d KT" % int(speed_knots),Vector2(20,34),22)
 	label_at("HDG %03d" % int(heading_deg),Vector2(290,34),21,GREEN)
 	var center := Vector2(256,390)
@@ -92,8 +103,11 @@ func _engines() -> void:
 		for row in 2:
 			var y := 146.0+row*163
 			draw_arc(Vector2(x,y),65,deg_to_rad(140),deg_to_rad(400),60,Color("899fa1"),3)
-			draw_arc(Vector2(x,y),65,deg_to_rad(140),deg_to_rad(310),50,GREEN,4)
-			draw_line(Vector2(x,y),Vector2(x+40,y-45),GREEN,3)
+			var value := (22+reverse_ratio*48) if row==0 else (350+reverse_ratio*270)
+			var fraction := value/(100.0 if row==0 else 900.0)
+			var angle := deg_to_rad(140+fraction*260)
+			draw_arc(Vector2(x,y),65,deg_to_rad(140),angle,50,GREEN,4)
+			draw_line(Vector2(x,y),Vector2(x,y)+Vector2(cos(angle),sin(angle))*58,GREEN,3)
 			label_at(("%.1f" % (22+reverse_ratio*48)) if row==0 else str(int(350+reverse_ratio*270)),Vector2(x-29,y+30),28,GREEN)
 	label_at("N1",Vector2(243,94),23)
 	label_at("EGT",Vector2(235,261),23)
@@ -101,3 +115,26 @@ func _engines() -> void:
 	label_at("FLAPS %d%%   SPLR %d%%" % [int(flap_ratio*100),int(spoiler_ratio*100)],Vector2(50,480),21,GREEN)
 	if reverse_ratio>0.1: label_at("REV         REV",Vector2(96,76),23,GREEN)
 	elif phase=="PARKED": label_at("PARKING BRAKE",Vector2(120,76),23,GREEN)
+
+func _map_point(p: Vector2) -> Vector2:
+	return Vector2(492-p.x*0.22,428-p.y*0.75)
+
+func _ground_map() -> void:
+	label_at("AIRPORT / NORTH APRON",Vector2(20,34),23,CYAN)
+	label_at("GS %02d KT" % int(speed_knots),Vector2(20,67),21,GREEN)
+	label_at("GATE A%d" % (gate_index+1),Vector2(327,67),21,GREEN)
+	draw_rect(Rect2(49,102,340,55),Color("233b45"))
+	for i in 10:
+		var stand := _map_point(Vector2(Ground.gate_station(i),350))
+		draw_line(stand,_map_point(Vector2(Ground.gate_station(i),200)),Color("4b6466"),2)
+		label_at(str(i+1),stand+Vector2(-5,-15),18,GREEN if i==gate_index else WHITE)
+	draw_line(Vector2(492,428),Vector2(42,428),Color("667273"),12)
+	label_at("26R",Vector2(444,409),20)
+	var route := Ground.route(gate_index)
+	for i in range(1,route.size()): draw_line(_map_point(route[i-1]),_map_point(route[i]),GREEN,3,true)
+	var at := _map_point(ground_position)
+	var direction := Vector2(-ground_direction.x, -ground_direction.y).normalized()
+	var side := direction.orthogonal()
+	draw_colored_polygon(PackedVector2Array([at+direction*11,at-direction*7+side*7,at-direction*7-side*7]),Color("ffe588"))
+	label_at("%.0f M TO STAND" % taxi_remaining,Vector2(22,483),22,GREEN)
+	label_at("ASSIST",Vector2(391,483),18,CYAN)

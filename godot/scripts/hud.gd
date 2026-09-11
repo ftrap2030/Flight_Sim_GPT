@@ -58,7 +58,7 @@ func _ready() -> void:
 	status = _label("KMIA · RUNWAY 26R",15,DIM)
 	status.position = Vector2(36,73)
 	root.add_child(status)
-	var tag := _label("LANDING + TAXI   •   PROTOTYPE",14,MINT)
+	var tag := _label("COCKPIT + MIAMI   •   VISUAL UPDATE",14,MINT)
 	tag.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	tag.position = Vector2(-392,34)
 	root.add_child(tag)

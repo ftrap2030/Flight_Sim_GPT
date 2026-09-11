@@ -328,8 +328,26 @@ func _run_smoke_test() -> void:
 		if absf(float(report.average_fps)-30.0)>0.01: failures.append("Benchmark FPS calculation failed")
 		if report.frames!=120: failures.append("Benchmark frame count failed")
 		DirAccess.remove_absolute(report_path)
+	# Check the visual update against the actual arrival state at the gate.
+	if not world._is_land(0,0): failures.append("Airport origin fell outside imported land")
+	for material_path in ["res://shaders/airframe.gdshader","res://shaders/cockpit.gdshader","res://shaders/pavement.gdshader"]:
+		var shader := load(material_path) as Shader
+		if shader==null: failures.append("Missing visual shader: "+material_path)
+		else: shader.get_shader_uniform_list()
+	arrival.skip_to_final()
+	for i in 30000:
+		arrival.tick(1.0/30.0)
+		if arrival.phase=="TAXI READY": arrival.auto_taxi = true
+		if arrival.phase=="PARKED": break
+	paused = true
+	select_view(0)
+	_update_aircraft(0.2)
+	for instrument in aircraft.instruments:
+		if instrument.phase!="PARKED" or instrument.speed_knots!=0: failures.append("Cockpit displays not synchronized at gate")
+	await get_tree().process_frame
+	await get_tree().process_frame
 	if failures.is_empty():
-		print("MIAMI_SMOKE_TEST_OK: runways, cameras, presets, pause, restart, benchmark")
+		print("MIAMI_SMOKE_TEST_OK: runways, cameras, presets, pause, restart, benchmark, coast, visual shaders, gate instruments")
 		get_tree().quit()
 	else:
 		for message in failures: push_error(message)
