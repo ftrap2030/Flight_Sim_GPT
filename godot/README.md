@@ -164,8 +164,12 @@ Freedom Tower and One Thousand Museum have original simplified landmark studies;
 a denser Brickell cluster and port/causeway details make the skyline easier to
 recognize. Landmark placement and dimensions remain approximate.
 
-No sound changes are included in this visual update. The next audio milestone
-requires the user's approval. Mesh batches are used for repetitive scenery;
+The subsequent compact audio update adds engine variation, wheel rumble, flap
+motor noise and a touchdown thump. Altitude callouts (1000, 500, 100, 50, 40,
+30, 20, 10 ft) use an installed English browser voice when available, with
+on-screen captions. Speech availability and voice vary by browser; no cloud
+voice is selected. The Sound switch mutes all audio. Sounds are synthesized
+prototype effects, not aircraft recordings. Mesh batches are used for repetitive scenery;
 there is no satellite texture stream. Performance and RAM on an 8 GB M1 remain
 targets to measure, not guaranteed limits.
 

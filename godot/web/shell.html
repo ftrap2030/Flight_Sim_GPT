@@ -34,6 +34,21 @@ const fullscreen=document.getElementById('fullscreen');
 let starting=false;
 let started=false;
 const engine=new Engine(config);
+// Optional speech: choose an installed local voice, never a cloud voice.
+window.miamiVoice={
+ cancel(){if('speechSynthesis' in window)speechSynthesis.cancel();},
+ say(text){
+  if(!('speechSynthesis' in window))return;
+  const voices=speechSynthesis.getVoices().filter(v=>v.localService&&/^en(-|_)/i.test(v.lang));
+  if(!voices.length)return;
+  speechSynthesis.cancel();
+  const utterance=new SpeechSynthesisUtterance(text);
+  utterance.voice=voices[0];utterance.rate=1.15;utterance.volume=.75;
+  speechSynthesis.speak(utterance);
+ }
+};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)window.miamiVoice.cancel();});
+
 function showError(message){launch.hidden=false;status.textContent=message;start.textContent='Reload and retry';start.disabled=false;starting=false;}
 start.addEventListener('click',async()=>{
  if(starting)return;

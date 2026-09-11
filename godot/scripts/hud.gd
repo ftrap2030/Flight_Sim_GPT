@@ -12,6 +12,7 @@ var info_panel: PanelContainer
 var quality_select: OptionButton
 var lighting_select: OptionButton
 var cloud_select: OptionButton
+var callout_caption: Label
 var gate_select: OptionButton
 var arrival_status: Label
 var auto_button: Button
@@ -109,7 +110,7 @@ func _ready() -> void:
 	flight.add_child(brake_button)
 	flight.add_child(_label("W / S: taxi speed · Hold X: brake\nSteering follows the mint route",14,DIM))
 	var sound := CheckButton.new()
-	sound.text = "Engine / reverse sound"
+	sound.text = "Sound + altitude callouts"
 	sound.button_pressed = true
 	sound.toggled.connect(func(enabled: bool): app.arrival_audio.enabled = enabled)
 	flight.add_child(sound)
@@ -157,6 +158,10 @@ func _ready() -> void:
 	toast = _label("",17,MINT)
 	toast.position = Vector2(36,107)
 	root.add_child(toast)
+	callout_caption = _label("",28,MINT)
+	callout_caption.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	callout_caption.position = Vector2(-90,-180)
+	root.add_child(callout_caption)
 	update_buttons()
 
 func _label(text: String, font_size: int, color: Color) -> Label:
@@ -198,6 +203,7 @@ func _panel_style() -> StyleBoxFlat:
 	return style
 
 func _process(delta: float) -> void:
+	callout_caption.text = app.arrival_audio.last_callout+" FT" if app.arrival_audio.caption_seconds>0 else ""
 	timer += delta
 	notice_seconds = maxf(0,notice_seconds-delta)
 	if notice_seconds==0: toast.text = ""
