@@ -12,6 +12,7 @@ def main():
     commands = [
         [args.godot, "--headless", "--editor", "--path", str(project), "--import"],
         [args.godot, "--headless", "--path", str(project), "--", "--smoke-test"],
+        [args.godot, "--headless", "--path", str(project), "--script", "res://tests/test_arrival.gd"],
     ]
     for index, command in enumerate(commands):
         result = subprocess.run(command, capture_output=True, text=True, timeout=90)
@@ -21,6 +22,8 @@ def main():
             raise SystemExit("Godot validation failed")
         if index == 1 and "MIAMI_SMOKE_TEST_OK" not in output:
             raise SystemExit("Godot smoke test did not finish")
+        if index == 2 and "ARRIVAL_TEST_OK" not in output:
+            raise SystemExit("Arrival tests did not finish")
     print("Graphics prototype validation passed")
 
 

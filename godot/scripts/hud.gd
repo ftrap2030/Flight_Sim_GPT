@@ -12,6 +12,10 @@ var info_panel: PanelContainer
 var quality_select: OptionButton
 var lighting_select: OptionButton
 var cloud_select: OptionButton
+var gate_select: OptionButton
+var arrival_status: Label
+var auto_button: Button
+var brake_button: Button
 var camera_buttons: Array[Button] = []
 var timer := 0.0
 var notice_seconds := 0.0
@@ -46,7 +50,7 @@ func _ready() -> void:
 	heading_back.add_theme_stylebox_override("panel",_panel_style())
 	root.add_child(heading_back)
 	var title := Label.new()
-	title.text = "MIAMI  /  APPROACH"
+	title.text = "MIAMI  /  ARRIVAL"
 	title.add_theme_font_size_override("font_size",32)
 	title.add_theme_color_override("font_color",INK)
 	title.position = Vector2(34,28)
@@ -54,7 +58,7 @@ func _ready() -> void:
 	status = _label("KMIA · RUNWAY 26R",15,DIM)
 	status.position = Vector2(36,73)
 	root.add_child(status)
-	var tag := _label("MILESTONE 01   •   VISUAL PROTOTYPE",14,MINT)
+	var tag := _label("LANDING + TAXI   •   PROTOTYPE",14,MINT)
 	tag.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	tag.position = Vector2(-392,34)
 	root.add_child(tag)
@@ -70,7 +74,7 @@ func _ready() -> void:
 	info.add_child(_label("PERFORMANCE",14,MINT))
 	telemetry = _label("",16,INK)
 	info.add_child(telemetry)
-	info.add_child(_label("Engine counters ≠ total app RAM\nTarget Mac benchmark still required",12,DIM))
+	info.add_child(_label("Engine counters ≠ total Mac RAM",12,DIM))
 	record_button = _button("Record benchmark  [B]",app.toggle_benchmark)
 	info.add_child(record_button)
 	info.add_child(_button("Download last report" if OS.has_feature("web") else "Open reports folder",app.open_benchmark_folder))
@@ -79,6 +83,36 @@ func _ready() -> void:
 	cap.button_pressed = true
 	cap.toggled.connect(func(enabled: bool): app.set_frame_limit(enabled))
 	info.add_child(cap)
+	var arrival_panel := PanelContainer.new()
+	arrival_panel.position = Vector2(22,148)
+	arrival_panel.custom_minimum_size = Vector2(405,0)
+	arrival_panel.add_theme_stylebox_override("panel",_panel_style())
+	root.add_child(arrival_panel)
+	var flight := VBoxContainer.new()
+	flight.add_theme_constant_override("separation",9)
+	arrival_panel.add_child(flight)
+	flight.add_child(_label("ARRIVAL / GATE",14,MINT))
+	var gate_names: Array = []
+	for i in 10: gate_names.append("Gate A%d" % (i+1))
+	gate_select = _options(flight,"DESTINATION",gate_names,app.select_gate)
+	gate_select.select(app.arrival.gate_index)
+	arrival_status = _label("",16,INK)
+	flight.add_child(arrival_status)
+	flight.add_child(_button("Jump to short final  [L]",app.short_final))
+	var speed_row := HBoxContainer.new()
+	speed_row.add_child(_button("Slower",app.taxi_speed_change.bind(-1.5)))
+	speed_row.add_child(_button("Faster",app.taxi_speed_change.bind(1.5)))
+	flight.add_child(speed_row)
+	auto_button = _button("Auto taxi  [G]",app.toggle_auto_taxi)
+	flight.add_child(auto_button)
+	brake_button = _button("Parking brake  [P]",app.toggle_parking_brake)
+	flight.add_child(brake_button)
+	flight.add_child(_label("W / S: taxi speed · Hold X: brake\nSteering follows the mint route",14,DIM))
+	var sound := CheckButton.new()
+	sound.text = "Engine / reverse sound"
+	sound.button_pressed = true
+	sound.toggled.connect(func(enabled: bool): app.arrival_audio.enabled = enabled)
+	flight.add_child(sound)
 	var tray := PanelContainer.new()
 	tray.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	tray.offset_left = 24
@@ -109,7 +143,7 @@ func _ready() -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
 	var flight_controls := VBoxContainer.new()
-	flight_controls.add_child(_label("APPROACH REPLAY",11,DIM))
+	flight_controls.add_child(_label("ARRIVAL",11,DIM))
 	var controls := HBoxContainer.new()
 	pause_button = _button("Pause  [Space]",app.toggle_pause)
 	controls.add_child(pause_button)
@@ -169,7 +203,21 @@ func _process(delta: float) -> void:
 	if notice_seconds==0: toast.text = ""
 	if timer<0.25 or app==null: return
 	timer = 0
-	status.text = "KMIA · RUNWAY 26R    /    %.1f NM    /    %s" % [app.remaining_m/1852.0,"PAUSED" if app.paused else "APPROACH REPLAY"]
+	status.text = "KMIA · 26R → A%d    /    %s    /    %d KT" % [app.arrival.gate_index+1,"PAUSED" if app.paused else app.arrival.phase,int(app.arrival.speed_ms*1.94384)]
+	gate_select.disabled = app.arrival.phase in ["TAXI","PARKED"]
+	var taxi_ready: bool = app.arrival.phase in ["TAXI READY","TAXI"]
+	auto_button.disabled = not taxi_ready
+	brake_button.disabled = not taxi_ready
+	auto_button.text = "Stop auto taxi  [G]" if app.arrival.auto_taxi else "Auto taxi  [G]"
+	brake_button.text = "Release parking brake  [P]" if app.arrival.parking_brake else "Set parking brake  [P]"
+	var guide := "Landing is assisted. Choose your gate."
+	if app.arrival.phase=="ROLLOUT": guide = "Reverse thrust + automatic braking"
+	elif taxi_ready:
+		guide = "W to taxi, or G for auto taxi"
+		if app.arrival.phase=="TAXI": guide = "%.0f m to stand · target %d kt" % [app.arrival.taxi_remaining,int((7.7 if app.arrival.auto_taxi else app.arrival.taxi_target_ms)*1.94384)]
+		if app.arrival.parking_brake: guide = "Parking brake set — press P to release"
+	elif app.arrival.phase=="PARKED": guide = "Gate reached · parking brake set"
+	arrival_status.text = "%s\nFlaps %d%% · Spoilers %d%%" % [guide,int(app.arrival.flap_ratio*100),int(app.arrival.spoiler_ratio*100)]
 	telemetry.text = "%d FPS   ·   %.1f ms\nEngine alloc.   %.0f MiB\nRender alloc.   %.0f MiB\nDraw calls       %d\nInternal scale   %d%%" % [Engine.get_frames_per_second(),1000.0/maxf(Engine.get_frames_per_second(),1),float(Performance.get_monitor(Performance.MEMORY_STATIC))/1048576,float(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED))/1048576,Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),int(app.render_scale*100)]
 	if app.benchmark.active: record_button.text = "Stop & save  •  %ds" % int(app.benchmark.seconds)
 	else: record_button.text = "Record benchmark  [B]"

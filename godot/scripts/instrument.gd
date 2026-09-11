@@ -4,6 +4,12 @@ var kind := "pfd"
 var altitude_ft := 1400.0
 var distance_nm := 4.5
 var bank_deg := 0.0
+var speed_knots := 145.0
+var heading_deg := 267.4
+var phase := "APPROACH"
+var flap_ratio := 1.0
+var reverse_ratio := 0.0
+var spoiler_ratio := 0.0
 var elapsed := 0.0
 var font: Font
 const GREEN := Color("71f8ad")
@@ -30,7 +36,7 @@ func _draw() -> void:
 	else: _engines()
 
 func _pfd() -> void:
-	label_at("SPEED   G/S     LOC     DEMO",Vector2(22,35),23,GREEN)
+	label_at(phase+"   /   ASSIST",Vector2(22,35),23,GREEN)
 	draw_rect(Rect2(104,100,304,270),Color("235376"))
 	draw_rect(Rect2(104,228+bank_deg,304,142-bank_deg),Color("745440"))
 	draw_line(Vector2(104,228+bank_deg),Vector2(408,228-bank_deg),WHITE,2)
@@ -47,22 +53,22 @@ func _pfd() -> void:
 	draw_rect(Rect2(418,102,82,270),Color("1c292f"))
 	for i in range(-3,4):
 		var y := 238.0+i*36
-		label_at(str(145-i*10),Vector2(23,y),21)
+		label_at(str(maxi(0,int(speed_knots)-i*10)),Vector2(23,y),21)
 		label_at(str(int(altitude_ft/100)*100-i*100),Vector2(420,y),19)
 	draw_rect(Rect2(12,209,84,40),Color("050b10"))
 	draw_rect(Rect2(12,209,84,40),Color("ffe588"),false,2)
-	label_at("145",Vector2(28,238),29,GREEN)
+	label_at(str(int(speed_knots)),Vector2(28,238),29,GREEN)
 	draw_rect(Rect2(414,209,96,40),Color("050b10"))
 	draw_rect(Rect2(414,209,96,40),Color("ffe588"),false,2)
 	label_at(str(int(altitude_ft)),Vector2(421,238),27,GREEN)
 	label_at("RADIO  %04d" % int(maxf(0,altitude_ft-8)),Vector2(164,403),22,GREEN)
-	label_at("260       267       280",Vector2(118,444),23)
+	label_at("HDG       %03d" % int(heading_deg),Vector2(118,444),23)
 	label_at("QNH 1013",Vector2(346,487),21,CYAN)
 	label_at("CAT I",Vector2(28,487),21)
 
 func _navigation() -> void:
-	label_at("GS 145   TAS 145",Vector2(20,34),22)
-	label_at("TRK 267 MAG",Vector2(290,34),21,GREEN)
+	label_at("GS %03d KT" % int(speed_knots),Vector2(20,34),22)
+	label_at("HDG %03d" % int(heading_deg),Vector2(290,34),21,GREEN)
 	var center := Vector2(256,390)
 	for radius in [105.0,210.0,315.0]:
 		draw_arc(center,radius,PI,TAU,80,Color("526768"),1.3)
@@ -88,8 +94,10 @@ func _engines() -> void:
 			draw_arc(Vector2(x,y),65,deg_to_rad(140),deg_to_rad(400),60,Color("899fa1"),3)
 			draw_arc(Vector2(x,y),65,deg_to_rad(140),deg_to_rad(310),50,GREEN,4)
 			draw_line(Vector2(x,y),Vector2(x+40,y-45),GREEN,3)
-			label_at("54.2" if row==0 else "620",Vector2(x-29,y+30),28,GREEN)
+			label_at(("%.1f" % (22+reverse_ratio*48)) if row==0 else str(int(350+reverse_ratio*270)),Vector2(x-29,y+30),28,GREEN)
 	label_at("N1",Vector2(243,94),23)
 	label_at("EGT",Vector2(235,261),23)
 	label_at("FOB     6 400 KG",Vector2(116,439),26,GREEN)
-	label_at("GEAR DOWN    FLAPS FULL",Vector2(50,480),21,GREEN)
+	label_at("FLAPS %d%%   SPLR %d%%" % [int(flap_ratio*100),int(spoiler_ratio*100)],Vector2(50,480),21,GREEN)
+	if reverse_ratio>0.1: label_at("REV         REV",Vector2(96,76),23,GREEN)
+	elif phase=="PARKED": label_at("PARKING BRAKE",Vector2(120,76),23,GREEN)

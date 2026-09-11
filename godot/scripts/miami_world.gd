@@ -1,6 +1,9 @@
 extends Node3D
 ## Meter-based local map: +X east, -Z north. Runways are data-backed;
 ## coastline, terminals and buildings are explicitly approximate art proxies.
+const Ground = preload("res://scripts/airport_ground.gd")
+var selected_route: MultiMeshInstance3D
+var gate_nodes: Array[Label3D] = []
 const G = preload("res://scripts/geometry.gd")
 var airport: Dictionary
 var threshold := Vector3.ZERO
@@ -17,6 +20,7 @@ func _ready() -> void:
 	airport = JSON.parse_string(FileAccess.get_file_as_string("res://data/miami_airport.json"))
 	_build_land()
 	_build_airport()
+	_build_ground_network()
 	_build_city()
 	_build_coastal_details()
 	_build_clouds()
@@ -207,3 +211,77 @@ func set_quality(level: int) -> void:
 func set_lighting(night_amount: float, cloud_tint: Color) -> void:
 	facade.set_shader_parameter("night_amount",night_amount)
 	cloud_material.set_shader_parameter("tint",cloud_tint)
+
+func ground_point(point: Vector2, height: float = 0.0) -> Vector3:
+	return threshold+inbound*point.x+inbound.cross(Vector3.UP)*point.y+Vector3.UP*(0.06+height)
+
+func _ground_line(transforms: Array[Transform3D], a: Vector2, b: Vector2, width: float, y: float, thickness: float = 0.025) -> void:
+	var start := ground_point(a,y)
+	var end := ground_point(b,y)
+	var basis := Basis.looking_at(end-start,Vector3.UP)
+	transforms.append(Transform3D(basis.scaled(Vector3(width,thickness,start.distance_to(end)+0.04)),(start+end)/2))
+
+func _build_ground_network() -> void:
+	var pavement: Array[Transform3D] = []
+	var yellow: Array[Transform3D] = []
+	var blue: Array[Transform3D] = []
+	var paths: Array[PackedVector2Array] = [Ground.exit_path(),PackedVector2Array([Vector2(500,200),Vector2(1750,200)])]
+	for i in Ground.GATE_COUNT: paths.append(Ground.stand_path(i))
+	for path in paths:
+		for i in range(1,path.size()):
+			_ground_line(pavement,path[i-1],path[i],28,-0.04,0.08)
+			_ground_line(yellow,path[i-1],path[i],0.35,0.06)
+			var length := path[i-1].distance_to(path[i])
+			var normal := (path[i]-path[i-1]).normalized().orthogonal()*14
+			for step in range(0,int(length),28):
+				for side in [-1,1]:
+					var point: Vector2 = path[i-1].lerp(path[i],float(step)/length)+normal*side
+					blue.append(Transform3D(Basis.IDENTITY.scaled(Vector3(0.4,0.3,0.4)),ground_point(point,0.2)))
+	_batch(pavement,G.material(Color("394143")),"TaxiwayPavement")
+	_batch(yellow,G.material(Color("efc64d")),"TaxiCenterlines")
+	var lamp := G.material(Color("488dfc"))
+	lamp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_batch(blue,lamp,"TaxiEdgeLights")
+	var apron := Node3D.new()
+	add_child(apron)
+	apron.position = ground_point(Vector2.ZERO,-0.07)
+	apron.look_at(apron.position+inbound,Vector3.UP)
+	var concrete := G.material(Color("8c908a"),0.96)
+	var wall := G.material(Color("c1c5bd"),0.75)
+	var glass := G.material(Color("284955"),0.28,0.3)
+	G.box(apron,Vector3(235,0.08,1100),Vector3(297.5,0,-1030),concrete)
+	G.box(apron,Vector3(90,18,1080),Vector3(450,9,-1030),wall)
+	G.box(apron,Vector3(2,9,1040),Vector3(404,11,-1030),glass)
+	G.box(apron,Vector3(98,1.2,1090),Vector3(448,18.5,-1030),wall)
+	var marking: Array[Transform3D] = []
+	for i in Ground.GATE_COUNT:
+		var station := Ground.gate_station(i)
+		_ground_line(marking,Vector2(station-8,350),Vector2(station+8,350),0.65,0.08)
+		# Lead-in lines and stop bars are shared with the actual guidance route.
+		var label := G.text3d(self,Ground.gate_name(i),ground_point(Vector2(station,400),13),64,Color("a9e2c4"),0.15)
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		gate_nodes.append(label)
+		G.box(apron,Vector3(42,3.2,3.8),Vector3(382,4.5,-station-7),glass)
+		G.box(apron,Vector3(4.5,4,7),Vector3(360,4.5,-station-4),wall)
+		G.box(apron,Vector3(0.8,4,0.8),Vector3(365,2,-station-7),wall)
+		# Stand boundaries, kept well outside the 36 m wingspan.
+		for side in [-1,1]:
+			_ground_line(marking,Vector2(station+side*29,290),Vector2(station+side*29,380),0.22,0.08)
+	_batch(marking,G.material(Color("eddda3")),"GateStandPaint")
+	var route_material := G.material(Color("a9e2c4"))
+	route_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	selected_route = _batch([],route_material,"SelectedTaxiRoute")
+	select_gate(4)
+
+func select_gate(index: int) -> void:
+	var path := Ground.route(index)
+	var transforms: Array[Transform3D] = []
+	for i in range(1,path.size()):
+		var length := path[i-1].distance_to(path[i])
+		for step in range(0,int(ceil(length)),12):
+			var a := path[i-1].lerp(path[i],float(step)/length)
+			var b := path[i-1].lerp(path[i],minf(float(step)+5,length)/length)
+			_ground_line(transforms,a,b,0.8,0.11)
+	selected_route.multimesh.instance_count = transforms.size()
+	for i in transforms.size(): selected_route.multimesh.set_instance_transform(i,transforms[i])
+	for i in gate_nodes.size(): gate_nodes[i].modulate = Color("a9e2c4") if i==index else Color("e4e5dc")

@@ -1,4 +1,9 @@
 extends Node3D
+const Arrival = preload("res://scripts/arrival.gd")
+const Ground = preload("res://scripts/airport_ground.gd")
+const ArrivalAudio = preload("res://scripts/arrival_audio.gd")
+var arrival := Arrival.new()
+var arrival_audio: AudioStreamPlayer
 const World = preload("res://scripts/miami_world.gd")
 const Aircraft = preload("res://scripts/aircraft_visual.gd")
 const Hud = preload("res://scripts/hud.gd")
@@ -45,6 +50,8 @@ func _ready() -> void:
 	_build_environment()
 	aircraft = Aircraft.new()
 	add_child(aircraft)
+	arrival_audio = ArrivalAudio.new()
+	add_child(arrival_audio)
 	camera = Camera3D.new()
 	camera.near = 0.07
 	camera.far = 65000.0
@@ -100,8 +107,9 @@ func _build_environment() -> void:
 func _process(delta: float) -> void:
 	elapsed += delta
 	if not paused:
-		remaining_m -= PREVIEW_SPEED_MS*delta
-		if remaining_m < 130.0: remaining_m = START_DISTANCE_M
+		var speed_input := float(Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP))-float(Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN))
+		arrival.tick(delta,speed_input,Input.is_physical_key_pressed(KEY_X))
+	remaining_m = maxf(0,-arrival.station)
 	_update_aircraft(delta)
 	benchmark.tick(delta,settings_snapshot())
 	if not capture_path.is_empty() and elapsed>=capture_after and not capture_requested:
@@ -109,12 +117,12 @@ func _process(delta: float) -> void:
 		_save_capture.call_deferred()
 
 func _update_aircraft(delta: float) -> void:
-	var height := remaining_m*tan(deg_to_rad(GLIDESLOPE_DEG))+16.0
-	aircraft.position = world.threshold-world.inbound*remaining_m+Vector3.UP*height
-	aircraft.look_at(aircraft.position+world.inbound,Vector3.UP)
-	var sway := 0.0 if paused else sin(elapsed*0.42)*0.002
-	aircraft.rotate_object_local(Vector3.BACK,sway)
-	aircraft.update_preview((aircraft.position.y+1.6)/0.3048,remaining_m/1852,sway*60,delta if not paused else 0.0)
+	aircraft.position = world.ground_point(arrival.position_2d,arrival.height)
+	var direction: Vector3 = world.inbound*arrival.direction_2d.x+world.inbound.cross(Vector3.UP)*arrival.direction_2d.y
+	aircraft.look_at(aircraft.position+direction,Vector3.UP)
+	aircraft.rotate_object_local(Vector3.RIGHT,deg_to_rad(arrival.pitch_deg))
+	aircraft.update_arrival(arrival,(aircraft.position.y+1.6)/0.3048,delta if not paused else 0.0)
+	arrival_audio.update_arrival(arrival,paused)
 	_update_camera()
 
 func _update_camera() -> void:
@@ -148,6 +156,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_3: select_view(2)
 			KEY_SPACE: toggle_pause()
 			KEY_R: restart()
+			KEY_L: short_final()
+			KEY_G: toggle_auto_taxi()
+			KEY_P: toggle_parking_brake()
 			KEY_T: set_lighting((lighting_index+1)%3)
 			KEY_F1: hud.info_panel.visible = not hud.info_panel.visible
 			KEY_H: hud.visible = not hud.visible
@@ -205,12 +216,51 @@ func toggle_pause() -> void:
 	hud.update_buttons()
 
 func restart() -> void:
+	arrival.reset()
 	remaining_m = START_DISTANCE_M
+	paused = false
 	look_offset = Vector2.ZERO
-	hud.notify("Approach restarted")
+	hud.update_buttons()
+	hud.notify("Arrival restarted — selected gate retained")
+
+func short_final() -> void:
+	arrival.skip_to_final()
+	remaining_m = maxf(0,-arrival.station)
+	paused = false
+	hud.update_buttons()
+	hud.notify("Short final — landing in about 17 seconds")
+
+func select_gate(index: int) -> void:
+	if arrival.select_gate(index):
+		world.select_gate(index)
+	else:
+		hud.notify("Restart to change gates after taxi begins")
+	hud.gate_select.select(arrival.gate_index)
+
+func toggle_auto_taxi() -> void:
+	if arrival.phase not in ["TAXI READY","TAXI"]:
+		hud.notify("Auto taxi becomes available after rollout")
+		return
+	arrival.auto_taxi = not arrival.auto_taxi
+	arrival.parking_brake = false
+	if not arrival.auto_taxi: arrival.taxi_target_ms = 0
+
+func taxi_speed_change(amount: float) -> void:
+	if arrival.phase not in ["TAXI READY","TAXI"]: return
+	arrival.auto_taxi = false
+	arrival.taxi_target_ms = clampf(arrival.taxi_target_ms+amount,0,7.7)
+
+func stop_taxi() -> void:
+	arrival.taxi_target_ms = 0
+	arrival.auto_taxi = false
+	arrival.parking_brake = true
+
+func toggle_parking_brake() -> void:
+	if arrival.phase not in ["TAXI READY","TAXI"]: return
+	arrival.parking_brake = not arrival.parking_brake
 
 func settings_snapshot() -> Dictionary:
-	return {"quality":quality_index,"scale":render_scale,"view":view_index,"lighting":lighting_index,"weather":weather_index,"fps_limit":Engine.max_fps,"paused":paused}
+	return {"quality":quality_index,"scale":render_scale,"view":view_index,"lighting":lighting_index,"weather":weather_index,"fps_limit":Engine.max_fps,"paused":paused,"phase":arrival.phase,"gate":Ground.gate_name(arrival.gate_index),"speed_knots":arrival.speed_ms*1.94384,"auto_taxi":arrival.auto_taxi}
 
 func toggle_benchmark() -> void:
 	if benchmark.active:

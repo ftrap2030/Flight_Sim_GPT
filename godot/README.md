@@ -1,21 +1,20 @@
-# Miami Approach — Milestone 1
+# Miami Approach — Landing and taxi prototype
 
-A standalone Godot visual prototype for Flight Sim GPT. It adds a procedural
-Airbus-inspired cockpit and exterior, a Miami scenery study, data-backed KMIA
-runway placement, lighting and weather presets, and repeatable approach replay.
+A standalone Godot prototype for Flight Sim GPT with an assisted arrival,
+animated landing surfaces, reverse thrust, and a connected ten-gate apron.
 
-**This milestone is a graphics study.** The camera follows a programmed 3°
-approach at 145 knots. The preview instruments display that demonstration.
-The Python flight model has not been ported or connected yet. Manual flying,
-taxiing, takeoff, landing physics, and controller support belong to subsequent
-milestones. The original Python simulator remains runnable from the repository
-root with `python main.py`.
+**Landing and taxi steering are assisted.** The aircraft follows a programmed
+3° approach, flares, touches down, deploys spoilers and reversers, then brakes
+to a stop before taxi. You control taxi speed on the selected route, or enable
+auto taxi. This is not a validated flight or landing dynamics model. The Python
+flight model is still separate; manual flying, free taxi steering, takeoff,
+and controller support are not connected. The original Python simulator
+remains runnable with `python main.py`.
 
 ## Run in a browser
 
-A browser version is available without a Mac app download. Use the browser link
-provided with the project and select **Open cockpit**. It retains the same
-scene and replay controls and starts at Low detail. A desktop browser with
+Open [Miami Approach](https://miami-approach.ftrap.chatgpt.site) and select
+**Open cockpit**. No Mac app download is needed. It starts at Low detail. A desktop browser with
 WebGL 2 and hardware acceleration is required. Chrome is the first browser to
 try on Mac. The engine downloads about 9 MB compressed on the first launch.
 
@@ -79,7 +78,14 @@ An 8 GB M1 is the target machine, not a verified minimum yet. The 30 FPS and
 | Zoom | Mouse wheel |
 | Release mouse and center view | Escape |
 | Pause / resume approach motion | Space |
-| Restart the approach | R |
+| Restart the full arrival, keeping the selected gate | R |
+| Jump to short final (about 17 seconds to touchdown) | L, or arrival-panel button |
+| Select gate A1–A10 before taxi begins | Destination menu |
+| Increase / decrease taxi target speed | Hold W / S or Up / Down, or Faster / Slower |
+| Brake and cancel auto taxi | Hold X |
+| Auto taxi / stop auto taxi | G, or arrival-panel button |
+| Set / release parking brake | P, or arrival-panel button |
+| Enable / mute synthesized engine and reverse sound | Engine / reverse sound switch |
 | Cycle golden hour / daylight / blue hour | T, or Light menu |
 | Clear / scattered / cloudy sky | Sky menu |
 | Change detail preset | Detail menu |
@@ -87,8 +93,17 @@ An 8 GB M1 is the target machine, not a verified minimum yet. The 30 FPS and
 | Hide / show all interface | H |
 | Start / stop and save a benchmark | B, or performance-panel button |
 
-The approach restarts shortly before the runway threshold. Pause freezes
-aircraft movement; sky animation continues. There is no touchdown simulation.
+The aircraft now lands and stops on the runway, waiting for taxi input. Choose
+a gate, then press W to increase taxi speed or G for auto taxi. Steering follows
+the mint dashed route; yellow lines mark the taxiways and blue lights their
+edges. Taxi speed is capped at 15 kt, reduced to about 6 kt on the final gate
+turn. Braking overrides auto taxi. Parking at the stand sets the brake; press R
+or L for another arrival. Gate selection locks when taxi begins.
+
+Flaps extend on approach and retract after leaving the runway. Spoilers rise
+after touchdown, reverser sleeves open during high-speed rollout, and a
+synthesized engine/reverse loop follows the sequence. Sound can be muted.
+Pause freezes aircraft movement and sound; sky animation continues.
 Changing the detail preset reuses existing scene instances rather than
 allocating another city.
 
@@ -116,7 +131,9 @@ applications. No M1 performance result is included or implied by this project.
 ## Scene scope and assets
 
 The four KMIA runway pairs use the coordinates and widths in the bundled
-OurAirports snapshot. The approach targets 26R. Airport pavement, terminal
+OurAirports snapshot. The approach targets 26R. Gates A1–A10 form a **fictional north apron**, connected
+without crossing the other runway strips. These are not real KMIA gate numbers
+or real-world taxi instructions. Airport pavement, terminal
 buildings, taxiways, skyline, coastline, islands, bridges, and port cranes are
 **approximate original scenery**, not a surveyed reconstruction. Terrain is
 flat. The coast is a procedural outline, not imported GIS geometry.
@@ -124,8 +141,8 @@ flat. The coast is a procedural outline, not imported GIS geometry.
 The cockpit, airframe and materials are original procedural assets. Cockpit
 proportions, the fuselage nose, wing profiles, glazing, doors, and lighting need
 further art work. There is no licensed production-quality A320 cockpit in this
-milestone. There are no paid assets, remote textures, network services, or
-runtime downloads. See [asset provenance](THIRD_PARTY_NOTICES.md).
+milestone. There are no paid assets or remote scenery/texture services; the browser
+downloads its engine and packaged project from the site. See [asset provenance](THIRD_PARTY_NOTICES.md).
 
 The source is deliberately separated into `miami_world.gd` (scenery),
 `aircraft_visual.gd` (model), `instrument.gd` (preview displays), `main.gd`
@@ -143,6 +160,8 @@ godot --headless --path godot -- --smoke-test
 
 The smoke test loads the full scene and checks airport data, camera transforms,
 detail/lighting/weather switches, pause/restart behavior, and benchmark output.
+Arrival checks also exercise all ten routes, wheel contact, reverse inhibition
+in flight, braking overrides, manual taxi speed, stand stopping, and reset.
 Headless rendering cannot validate shader appearance. A normal rendered run
 is required too. Capture an actual engine frame with:
 

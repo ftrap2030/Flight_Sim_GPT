@@ -7,6 +7,9 @@ var exterior: Node3D
 var instruments: Array[Control] = []
 var viewports: Array[SubViewport] = []
 var fan_nodes: Array[Node3D] = []
+var flap_nodes: Array[Node3D] = []
+var spoiler_nodes: Array[Node3D] = []
+var reverser_nodes: Array[Node3D] = []
 
 func _ready() -> void:
 	_build_interior()
@@ -104,14 +107,33 @@ func _build_exterior() -> void:
 	tail.rotation.x = PI/2
 	G.profile(exterior,PackedVector2Array([Vector2(25.8,1.8),Vector2(29.5,7.5),Vector2(31.0,7.5),Vector2(33.5,1.8)]),0.22,navy)
 	for side in [-1,1]:
-		var wing := PackedVector2Array([Vector2(side*1.5,11.5),Vector2(side*17.9,20),Vector2(side*17.9,21.4),Vector2(side*1.5,19)])
+		var wing := PackedVector2Array([Vector2(side*1.5,11.5),Vector2(side*17.9,20),Vector2(side*17.9,20.8),Vector2(side*1.5,17.7)])
 		G.polygon(exterior,wing,-0.20,white)
 		G.box(exterior,Vector3(0.17,1.8,1.35),Vector3(side*17.9,0.60,20.6),navy).rotation.z = side*deg_to_rad(15)
 		G.polygon(exterior,PackedVector2Array([Vector2(side*1.0,28),Vector2(side*6.8,31.3),Vector2(side*6.8,32.4),Vector2(side*1.0,31.4)]),1.0,white)
+		# Hinged trailing-edge surfaces: flap droops; spoiler rises after touchdown.
+		for section in 2:
+			var x: float = side*(2.0+section*6.8)
+			var z := 17.7+section*1.4
+			var flap := Node3D.new()
+			exterior.add_child(flap)
+			flap.position = Vector3(x,-0.18,z)
+			G.polygon(flap,PackedVector2Array([Vector2(0,0),Vector2(side*6.5,1.35),Vector2(side*6.5,2.3),Vector2(0,1.5)]),0,white)
+			flap_nodes.append(flap)
+			var spoiler := Node3D.new()
+			exterior.add_child(spoiler)
+			spoiler.position = Vector3(x,0.0,z-1.4)
+			G.polygon(spoiler,PackedVector2Array([Vector2(0,0),Vector2(side*5.8,1.2),Vector2(side*5.8,2.0),Vector2(0,0.8)]),0,aluminium)
+			spoiler_nodes.append(spoiler)
 		# Subtle flap and aileron seams improve the wing inspection view.
 		G.beam(exterior,Vector3(side*2.0,-0.16,17.8),Vector3(side*16.2,-0.16,20.7),0.022,aluminium)
-		var engine := G.cylinder(exterior,1.2,1.15,3.4,Vector3(side*5.8,-1.55,13.7),white,32)
+		var engine := G.cylinder(exterior,1.2,1.15,2.4,Vector3(side*5.8,-1.55,13.2),white,32)
 		engine.rotation.x = PI/2
+		var cascade := G.cylinder(exterior,1.08,1.08,1.15,Vector3(side*5.8,-1.55,14.8),dark,24)
+		cascade.rotation.x = PI/2
+		var sleeve := G.cylinder(exterior,1.16,1.13,1.05,Vector3(side*5.8,-1.55,14.85),white,24)
+		sleeve.rotation.x = PI/2
+		reverser_nodes.append(sleeve)
 		var inlet := G.cylinder(exterior,1.02,1.02,0.06,Vector3(side*5.8,-1.55,11.96),dark,32)
 		inlet.rotation.x = PI/2
 		var hub := G.cylinder(exterior,0.22,0.0,0.5,Vector3(side*5.8,-1.55,11.7),aluminium,20)
@@ -132,15 +154,24 @@ func _build_exterior() -> void:
 			wheel.rotation.z = PI/2
 	G.box(exterior,Vector3(0.14,1.1,0.14),Vector3(0,-2.0,2.5),aluminium)
 	for x in [-0.18,0.18]:
-		var wheel := G.cylinder(exterior,0.29,0.29,0.16,Vector3(x,-2.62,2.5),dark)
+		var wheel := G.cylinder(exterior,0.29,0.29,0.16,Vector3(x,-2.87,2.5),dark)
 		wheel.rotation.z = PI/2
 
-func update_preview(altitude: float, distance: float, bank: float, delta: float) -> void:
+func update_arrival(state: RefCounted, altitude: float, delta: float) -> void:
 	for instrument in instruments:
 		instrument.altitude_ft = altitude
-		instrument.distance_nm = distance
-		instrument.bank_deg = bank
-	for fan in fan_nodes: fan.rotation.z += delta*14
+		instrument.distance_nm = maxf(0,-state.station)/1852.0
+		instrument.bank_deg = 0.0
+		instrument.speed_knots = state.speed_ms*1.94384
+		instrument.phase = state.phase
+		instrument.flap_ratio = state.flap_ratio
+		instrument.reverse_ratio = state.reverse_ratio
+		instrument.spoiler_ratio = state.spoiler_ratio
+		instrument.heading_deg = fposmod(267.4-rad_to_deg(state.direction_2d.angle()),360)
+	for fan in fan_nodes: fan.rotation.z += delta*(5+state.reverse_ratio*24+state.speed_ms*0.12)
+	for flap in flap_nodes: flap.rotation.x = deg_to_rad(35)*state.flap_ratio
+	for spoiler in spoiler_nodes: spoiler.rotation.x = -deg_to_rad(55)*state.spoiler_ratio
+	for sleeve in reverser_nodes: sleeve.position.z = 14.85+state.reverse_ratio*0.85
 
 func set_cockpit_visible(value: bool) -> void:
 	interior.visible = value
